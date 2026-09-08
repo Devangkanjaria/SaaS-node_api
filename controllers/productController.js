@@ -4,7 +4,7 @@ const { sendSuccess, sendCreated, sendPaginated } = require("../utils/responseHa
 class ProductController {
   async listProducts(req, res, next) {
     try {
-      const { products, pagination } = await productService.listProducts(req.query);
+      const { products, pagination } = await productService.listProducts(req.organizationId, req.query);
       return sendPaginated(res, "Products fetched successfully", products, pagination);
     } catch (err) {
       next(err);
@@ -13,7 +13,7 @@ class ProductController {
 
   async getProductById(req, res, next) {
     try {
-      const product = await productService.getProductById(req.params.id);
+      const product = await productService.getProductById(req.organizationId, req.params.id);
       return sendSuccess(res, "Product fetched successfully", product);
     } catch (err) {
       next(err);
@@ -22,7 +22,7 @@ class ProductController {
 
   async createProduct(req, res, next) {
     try {
-      const product = await productService.createProduct(req.body, req.user.id);
+      const product = await productService.createProduct(req.organizationId, req.body, req.user.id);
       return sendCreated(res, "Product created successfully", product);
     } catch (err) {
       next(err);
@@ -31,7 +31,7 @@ class ProductController {
 
   async updateProduct(req, res, next) {
     try {
-      const product = await productService.updateProduct(req.params.id, req.body);
+      const product = await productService.updateProduct(req.organizationId, req.params.id, req.body);
       return sendSuccess(res, "Product updated successfully", product);
     } catch (err) {
       next(err);
@@ -40,7 +40,7 @@ class ProductController {
 
   async updateProductStatus(req, res, next) {
     try {
-      const product = await productService.updateProductStatus(req.params.id, req.body.status);
+      const product = await productService.updateProductStatus(req.organizationId, req.params.id, req.body.status);
       return sendSuccess(res, "Product status updated successfully", product);
     } catch (err) {
       next(err);
@@ -49,7 +49,7 @@ class ProductController {
 
   async deleteProduct(req, res, next) {
     try {
-      const result = await productService.deleteProduct(req.params.id);
+      const result = await productService.deleteProduct(req.organizationId, req.params.id);
       return sendSuccess(res, result.message);
     } catch (err) {
       next(err);
@@ -59,7 +59,7 @@ class ProductController {
   // Categories
   async listCategories(req, res, next) {
     try {
-      const categories = await productService.listCategories();
+      const categories = await productService.listCategories(req.organizationId);
       return sendSuccess(res, "Categories fetched successfully", categories);
     } catch (err) {
       next(err);
@@ -68,7 +68,7 @@ class ProductController {
 
   async createCategory(req, res, next) {
     try {
-      const category = await productService.createCategory(req.body);
+      const category = await productService.createCategory(req.organizationId, req.body);
       return sendCreated(res, "Category created successfully", category);
     } catch (err) {
       next(err);
@@ -77,7 +77,7 @@ class ProductController {
 
   async updateCategory(req, res, next) {
     try {
-      const category = await productService.updateCategory(req.params.id, req.body);
+      const category = await productService.updateCategory(req.organizationId, req.params.id, req.body);
       return sendSuccess(res, "Category updated successfully", category);
     } catch (err) {
       next(err);
@@ -87,7 +87,7 @@ class ProductController {
   // Inventory
   async getInventory(req, res, next) {
     try {
-      const inventory = await productService.getInventory(req.params.id);
+      const inventory = await productService.getInventory(req.organizationId, req.params.id);
       return sendSuccess(res, "Inventory fetched successfully", inventory);
     } catch (err) {
       next(err);
@@ -96,7 +96,7 @@ class ProductController {
 
   async updateInventory(req, res, next) {
     try {
-      const inventory = await productService.updateInventory(req.params.id, req.body);
+      const inventory = await productService.updateInventory(req.organizationId, req.params.id, req.body);
       return sendSuccess(res, "Inventory updated successfully", inventory);
     } catch (err) {
       next(err);

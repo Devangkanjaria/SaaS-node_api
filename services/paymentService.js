@@ -3,13 +3,13 @@ const paymentRepository = require("../repositories/paymentRepository");
 const invoiceRepository = require("../repositories/invoiceRepository");
 const auditService = require("./auditService");
 const notificationService = require("./notificationService");
-const { NotFoundError, BadRequestError, UnprocessableEntityError, ConflictError } = require("../errors/errorTypes");
+const { NotFoundError, BadRequestError, UnprocessableEntityError } = require("../errors/errorTypes");
 const { INVOICE_STATUS, PAYMENT_STATUS } = require("../constants/statusCodes");
 
 const round2 = (num) => Math.round((Number(num) + Number.EPSILON) * 100) / 100;
 
 class PaymentService {
-  async listPayments(query) {
+  async listPayments(organizationId, query) {
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 10));
     const invoiceId = query.invoiceId ? parseInt(query.invoiceId, 10) : null;
@@ -18,7 +18,7 @@ class PaymentService {
     const dateFrom = query.date_from || query.from_date || null;
     const dateTo = query.date_to || query.to_date || null;
 
-    const { payments, total } = await paymentRepository.listPayments({
+    const { payments, total } = await paymentRepository.listPayments(organizationId, {
       page,
       limit,
       invoiceId,
@@ -34,8 +34,8 @@ class PaymentService {
     };
   }
 
-  async getPaymentById(id) {
-    const payment = await paymentRepository.findById(id);
+  async getPaymentById(organizationId, id) {
+    const payment = await paymentRepository.findById(organizationId, id);
     if (!payment) {
       throw new NotFoundError("Payment not found");
     }
@@ -43,27 +43,25 @@ class PaymentService {
   }
 
   /**
-   * Transactional Payment Creation with Idempotency Support
+   * Tenant-Scoped Transactional Payment Creation
    */
-  async createPayment(invoiceId, paymentData, req) {
+  async createPayment(organizationId, invoiceId, paymentData, req) {
     const userId = req.user ? req.user.id : null;
     const paymentAmount = round2(paymentData.amount);
 
-    // 1. Check Idempotency if transaction_id is present
+    // 1. Idempotency Check
     if (paymentData.transaction_id) {
       const existingTx = await paymentRepository.findTransactionById(paymentData.transaction_id);
       if (existingTx) {
-        // Return existing payment safely without duplicate creation
-        return paymentRepository.findById(existingTx.payment_id);
+        return paymentRepository.findById(organizationId, existingTx.payment_id);
       }
     }
 
-    // 2. Begin Knex Transaction
+    // 2. Transaction
     return await db.transaction(async (trx) => {
-      // Lock and read invoice safely
-      const invoice = await invoiceRepository.findByIdForUpdate(invoiceId, trx);
+      const invoice = await invoiceRepository.findByIdForUpdate(organizationId, invoiceId, trx);
       if (!invoice) {
-        throw new NotFoundError("Invoice not found");
+        throw new NotFoundError("Invoice not found in your organization");
       }
 
       if (invoice.status === INVOICE_STATUS.CANCELLED) {
@@ -84,6 +82,7 @@ class PaymentService {
       // 3. Insert Payment
       const payment = await paymentRepository.create(
         {
+          organization_id: organizationId,
           invoice_id: invoiceId,
           amount: paymentAmount,
           payment_method: paymentData.payment_method,
@@ -96,7 +95,7 @@ class PaymentService {
         trx
       );
 
-      // 4. Insert Payment Transaction if transaction_id / gateway is provided
+      // 4. Insert Payment Transaction
       if (paymentData.transaction_id) {
         await paymentRepository.createPaymentTransaction(
           {
@@ -113,11 +112,10 @@ class PaymentService {
         );
       }
 
-      // 5. Calculate New Financials
+      // 5. Update Financials
       const newPaidAmount = round2(Number(invoice.paid_amount) + paymentAmount);
       const newBalanceAmount = Math.max(0, round2(Number(invoice.total_amount) - newPaidAmount));
 
-      // 6. Determine New Invoice Status
       let newInvoiceStatus = invoice.status;
       if (newBalanceAmount <= 0) {
         newInvoiceStatus = INVOICE_STATUS.PAID;
@@ -125,8 +123,8 @@ class PaymentService {
         newInvoiceStatus = INVOICE_STATUS.PARTIAL;
       }
 
-      // 7. Update Invoice
       await invoiceRepository.update(
+        organizationId,
         invoiceId,
         {
           paid_amount: newPaidAmount,
@@ -136,7 +134,6 @@ class PaymentService {
         trx
       );
 
-      // 8. Record Status History if status transitioned
       if (newInvoiceStatus !== invoice.status) {
         await invoiceRepository.createStatusHistory(
           {
@@ -150,7 +147,6 @@ class PaymentService {
         );
       }
 
-      // 9. Audit Logging
       await auditService.logAction(
         req,
         {
@@ -162,10 +158,10 @@ class PaymentService {
         trx
       );
 
-      // 10. Notification
       if (userId) {
         await notificationService.notify(
           {
+            organizationId,
             userId,
             type: "PAYMENT_RECEIVED",
             title: "Payment Received",
@@ -184,25 +180,24 @@ class PaymentService {
   /**
    * Process Payment Refund
    */
-  async refundPayment(paymentId, { reason }, req) {
+  async refundPayment(organizationId, paymentId, { reason }, req) {
     const userId = req.user ? req.user.id : null;
 
     return await db.transaction(async (trx) => {
-      const payment = await paymentRepository.findByIdForUpdate(paymentId, trx);
+      const payment = await paymentRepository.findByIdForUpdate(organizationId, paymentId, trx);
       if (!payment) {
-        throw new NotFoundError("Payment not found");
+        throw new NotFoundError("Payment not found in your organization");
       }
 
       if (payment.status === PAYMENT_STATUS.REFUNDED) {
         throw new BadRequestError("This payment has already been refunded");
       }
 
-      const invoice = await invoiceRepository.findByIdForUpdate(payment.invoice_id, trx);
+      const invoice = await invoiceRepository.findByIdForUpdate(organizationId, payment.invoice_id, trx);
       if (!invoice) {
         throw new NotFoundError("Invoice associated with payment not found");
       }
 
-      // Adjust invoice paid and balance amounts
       const refundAmount = round2(payment.amount);
       const newPaidAmount = Math.max(0, round2(Number(invoice.paid_amount) - refundAmount));
       const newBalanceAmount = Math.min(Number(invoice.total_amount), round2(Number(invoice.balance_amount) + refundAmount));
@@ -214,8 +209,8 @@ class PaymentService {
         newInvoiceStatus = INVOICE_STATUS.PARTIAL;
       }
 
-      // Update payment record status
       await paymentRepository.update(
+        organizationId,
         paymentId,
         {
           status: PAYMENT_STATUS.REFUNDED,
@@ -224,8 +219,8 @@ class PaymentService {
         trx
       );
 
-      // Update invoice
       await invoiceRepository.update(
+        organizationId,
         payment.invoice_id,
         {
           paid_amount: newPaidAmount,
@@ -235,7 +230,6 @@ class PaymentService {
         trx
       );
 
-      // Record invoice status history
       await invoiceRepository.createStatusHistory(
         {
           invoiceId: payment.invoice_id,
@@ -247,7 +241,6 @@ class PaymentService {
         trx
       );
 
-      // Audit log
       await auditService.logAction(
         req,
         {
@@ -259,7 +252,7 @@ class PaymentService {
         trx
       );
 
-      return paymentRepository.findById(paymentId, trx);
+      return paymentRepository.findById(organizationId, paymentId, trx);
     });
   }
 }

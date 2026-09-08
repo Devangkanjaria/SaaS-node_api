@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const authRoutes = require("./authRoutes");
+const organizationRoutes = require("./organizationRoutes");
 const userRoutes = require("./userRoutes");
 const roleRoutes = require("./roleRoutes");
 const clientRoutes = require("./clientRoutes");
@@ -14,6 +15,7 @@ const dashboardRoutes = require("./dashboardRoutes");
 
 // Mount sub-routers
 router.use("/auth", authRoutes);
+router.use("/organizations", organizationRoutes);
 router.use("/users", userRoutes);
 router.use("/roles", roleRoutes);
 router.use("/clients", clientRoutes);

@@ -7,16 +7,21 @@ const { ROLES, PERMISSIONS } = require("../constants/roles");
  */
 exports.seed = async function (knex) {
   // 1. Clear existing relations safely (preserving constraints order)
+  await knex("subscription_transactions").del();
+  await knex("subscriptions").del();
+  await knex("plans").del();
+  await knex("organization_members").del();
+  await knex("organizations").del();
   await knex("role_permissions").del();
   await knex("user_roles").del();
   await knex("permissions").del();
   await knex("roles").del();
 
-  // 2. Insert Roles
+  // 2. Insert System Roles
   await knex("roles").insert([
-    { id: 1, name: ROLES.ADMIN, description: "Full system administration access" },
-    { id: 2, name: ROLES.ACCOUNTANT, description: "Manage invoices, payments, taxes, and clients" },
-    { id: 3, name: ROLES.STAFF, description: "Create invoices and view basic data" },
+    { id: 1, name: ROLES.ADMIN, description: "Full organization administrator access", is_system_role: true },
+    { id: 2, name: ROLES.ACCOUNTANT, description: "Manage invoices, payments, taxes, and clients", is_system_role: true },
+    { id: 3, name: ROLES.STAFF, description: "Create invoices and view basic data", is_system_role: true },
   ]);
 
   // 3. Insert Permissions
@@ -75,13 +80,11 @@ exports.seed = async function (knex) {
     return acc;
   }, {});
 
-  // Admin gets ALL permissions
   const adminRoleMappings = allPermissions.map((p) => ({
     role_id: 1,
     permission_id: p.id,
   }));
 
-  // Accountant gets invoices, payments, clients, products, reports, dashboard, taxes, discounts
   const accountantPermNames = [
     PERMISSIONS.CLIENT_VIEW,
     PERMISSIONS.CLIENT_CREATE,
@@ -105,7 +108,6 @@ exports.seed = async function (knex) {
       permission_id: permMap[name],
     }));
 
-  // Staff gets client view/create, product view, invoice view/create
   const staffPermNames = [
     PERMISSIONS.CLIENT_VIEW,
     PERMISSIONS.CLIENT_CREATE,
@@ -126,9 +128,52 @@ exports.seed = async function (knex) {
     ...staffRoleMappings,
   ]);
 
-  // 5. Create Default Admin User (if not existing)
-  const existingAdmin = await knex("users").where({ email: "admin@saas.com" }).first();
-  if (!existingAdmin) {
+  // 5. Insert SaaS Pricing Plans
+  await knex("plans").insert([
+    {
+      id: 1,
+      name: "Starter / Trial",
+      code: "starter",
+      description: "For small businesses & freelancers",
+      price: 0.00,
+      billing_interval: "monthly",
+      max_users: 3,
+      max_clients: 50,
+      max_products: 100,
+      max_invoices: 100,
+      status: "active",
+    },
+    {
+      id: 2,
+      name: "Professional",
+      code: "pro",
+      description: "For growing teams and businesses",
+      price: 999.00,
+      billing_interval: "monthly",
+      max_users: 10,
+      max_clients: 500,
+      max_products: 1000,
+      max_invoices: 1000,
+      status: "active",
+    },
+    {
+      id: 3,
+      name: "Enterprise",
+      code: "enterprise",
+      description: "Unlimited scale and features",
+      price: 2999.00,
+      billing_interval: "monthly",
+      max_users: 100,
+      max_clients: null,
+      max_products: null,
+      max_invoices: null,
+      status: "active",
+    },
+  ]);
+
+  // 6. Create Default Admin User
+  let adminUser = await knex("users").where({ email: "admin@saas.com" }).first();
+  if (!adminUser) {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash("Admin@123", salt);
 
@@ -141,11 +186,43 @@ exports.seed = async function (knex) {
       created_at: new Date(),
       updated_at: new Date(),
     });
-
-    await knex("user_roles").insert({
-      user_id: adminUserId,
-      role_id: 1, // Admin role
-      created_at: new Date(),
-    });
+    adminUser = { id: adminUserId };
   }
+
+  // 7. Create Demo Organization & Connect Admin as Member
+  const [orgId] = await knex("organizations").insert({
+    name: "Acme Enterprise",
+    slug: "acme-enterprise",
+    email: "billing@acme.com",
+    phone: "9876543210",
+    status: "active",
+    timezone: "Asia/Kolkata",
+    currency: "INR",
+    created_at: new Date(),
+    updated_at: new Date(),
+  });
+
+  await knex("organization_members").insert({
+    organization_id: orgId,
+    user_id: adminUser.id,
+    role_id: 1, // Admin role
+    status: "active",
+    joined_at: new Date(),
+    created_at: new Date(),
+    updated_at: new Date(),
+  });
+
+  // Assign Starter Plan Subscription to Demo Org
+  const trialEndDate = new Date();
+  trialEndDate.setDate(trialEndDate.getDate() + 30);
+
+  await knex("subscriptions").insert({
+    organization_id: orgId,
+    plan_id: 1,
+    status: "active",
+    starts_at: new Date(),
+    trial_ends_at: trialEndDate,
+    created_at: new Date(),
+    updated_at: new Date(),
+  });
 };

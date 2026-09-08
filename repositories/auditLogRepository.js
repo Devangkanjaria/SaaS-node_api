@@ -1,9 +1,10 @@
 const db = require("../config/db");
 
 class AuditLogRepository {
-  async createLog({ userId, action, entityType, entityId, oldValues = null, newValues = null, ipAddress = null, userAgent = null }, trx = null) {
+  async createLog({ organizationId, userId, action, entityType, entityId, oldValues = null, newValues = null, ipAddress = null, userAgent = null }, trx = null) {
     const query = (trx || db)("audit_logs");
     return query.insert({
+      organization_id: organizationId || null,
       user_id: userId || null,
       action,
       entity_type: entityType,
@@ -16,9 +17,11 @@ class AuditLogRepository {
     });
   }
 
-  async listLogs({ page = 1, limit = 20, entityType, entityId, userId }) {
+  async listLogs(organizationId, { page = 1, limit = 20, entityType, entityId, userId }) {
     const offset = (page - 1) * limit;
-    let baseQuery = db("audit_logs").leftJoin("users", "audit_logs.user_id", "users.id");
+    let baseQuery = db("audit_logs")
+      .leftJoin("users", "audit_logs.user_id", "users.id")
+      .where("audit_logs.organization_id", organizationId);
 
     if (entityType) {
       baseQuery = baseQuery.where("audit_logs.entity_type", entityType);

@@ -3,13 +3,14 @@ const invoiceRepository = require("../repositories/invoiceRepository");
 const clientRepository = require("../repositories/clientRepository");
 const productRepository = require("../repositories/productRepository");
 const invoiceCalculationService = require("./invoiceCalculationService");
+const planLimitService = require("./planLimitService");
 const auditService = require("./auditService");
 const notificationService = require("./notificationService");
 const { NotFoundError, BadRequestError, UnprocessableEntityError } = require("../errors/errorTypes");
 const { INVOICE_STATUS } = require("../constants/statusCodes");
 
 class InvoiceService {
-  async listInvoices(query) {
+  async listInvoices(organizationId, query) {
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 10));
     const search = query.search || null;
@@ -25,7 +26,7 @@ class InvoiceService {
     const allowedSortFields = ["id", "invoice_number", "issue_date", "due_date", "total_amount", "paid_amount", "balance_amount", "status", "created_at"];
     const validSortBy = allowedSortFields.includes(sortBy) ? sortBy : "created_at";
 
-    const { invoices, total } = await invoiceRepository.listInvoices({
+    const { invoices, total } = await invoiceRepository.listInvoices(organizationId, {
       page,
       limit,
       search,
@@ -45,8 +46,8 @@ class InvoiceService {
     };
   }
 
-  async getInvoiceById(id) {
-    const invoice = await invoiceRepository.findById(id);
+  async getInvoiceById(organizationId, id) {
+    const invoice = await invoiceRepository.findById(organizationId, id);
     if (!invoice) {
       throw new NotFoundError("Invoice not found");
     }
@@ -64,26 +65,29 @@ class InvoiceService {
   }
 
   /**
-   * Transactional Invoice Creation
+   * Tenant-Scoped Transactional Invoice Creation
    */
-  async createInvoice(invoiceData, req) {
+  async createInvoice(organizationId, invoiceData, req) {
     const userId = req.user ? req.user.id : null;
 
-    // 1. Verify Client
-    const client = await clientRepository.findById(invoiceData.client_id);
+    // 0. Enforce SaaS Plan Limit on Invoices
+    await planLimitService.checkInvoiceLimit(organizationId);
+
+    // 1. Verify Client in Tenant
+    const client = await clientRepository.findById(organizationId, invoiceData.client_id);
     if (!client) {
-      throw new NotFoundError("Client not found");
+      throw new NotFoundError("Client not found in this organization");
     }
     if (client.status !== "active") {
       throw new BadRequestError("Cannot create invoice for an inactive client");
     }
 
-    // 2. Validate Products & Stock if product_id is provided
+    // 2. Validate Products & Stock in Tenant
     for (const item of invoiceData.items) {
       if (item.product_id) {
-        const product = await productRepository.findById(item.product_id);
+        const product = await productRepository.findById(organizationId, item.product_id);
         if (!product) {
-          throw new NotFoundError(`Product ID ${item.product_id} not found`);
+          throw new NotFoundError(`Product ID ${item.product_id} not found in this organization`);
         }
         if (product.status !== "active") {
           throw new BadRequestError(`Product "${product.name}" is currently inactive`);
@@ -91,7 +95,7 @@ class InvoiceService {
       }
     }
 
-    // 3. Recalculate Financials Server-Side (Source of Truth)
+    // 3. Recalculate Financials Server-Side
     const calculation = invoiceCalculationService.calculateInvoice({
       items: invoiceData.items,
       discount: invoiceData.discount,
@@ -100,20 +104,21 @@ class InvoiceService {
 
     // 4. Begin Knex Database Transaction
     return await db.transaction(async (trx) => {
-      // Generate unique invoice number if not explicitly provided
+      // Generate unique invoice number scoped to organization
       let invoiceNumber = invoiceData.invoice_number;
       if (!invoiceNumber) {
-        invoiceNumber = await invoiceRepository.generateNextInvoiceNumber(trx);
+        invoiceNumber = await invoiceRepository.generateNextInvoiceNumber(organizationId, trx);
       } else {
-        const existing = await invoiceRepository.findByInvoiceNumber(invoiceNumber, trx);
+        const existing = await invoiceRepository.findByInvoiceNumber(organizationId, invoiceNumber, trx);
         if (existing) {
-          throw new BadRequestError(`Invoice number ${invoiceNumber} already exists`);
+          throw new BadRequestError(`Invoice number ${invoiceNumber} already exists in your organization`);
         }
       }
 
       // Insert Invoice Record
       const invoiceId = await invoiceRepository.create(
         {
+          organization_id: organizationId,
           invoice_number: invoiceNumber,
           client_id: invoiceData.client_id,
           status: INVOICE_STATUS.DRAFT,
@@ -156,7 +161,7 @@ class InvoiceService {
         }
       }
 
-      // Insert initial invoice status history
+      // Status History
       await invoiceRepository.createStatusHistory(
         {
           invoiceId,
@@ -168,7 +173,7 @@ class InvoiceService {
         trx
       );
 
-      // Insert Audit Log
+      // Audit Log
       await auditService.logAction(
         req,
         {
@@ -180,10 +185,11 @@ class InvoiceService {
         trx
       );
 
-      // Create Notification
+      // Notification
       if (userId) {
         await notificationService.notify(
           {
+            organizationId,
             userId,
             type: "INVOICE_CREATED",
             title: "Invoice Created",
@@ -195,8 +201,7 @@ class InvoiceService {
         );
       }
 
-      // Fetch created invoice with details
-      const createdInvoice = await invoiceRepository.findById(invoiceId, trx);
+      const createdInvoice = await invoiceRepository.findById(organizationId, invoiceId, trx);
       const insertedItems = await invoiceRepository.getInvoiceItems(invoiceId, trx);
 
       return {
@@ -207,15 +212,15 @@ class InvoiceService {
   }
 
   /**
-   * Transactional Invoice Update (Only allowed in 'draft' or 'sent' status)
+   * Tenant-Scoped Transactional Invoice Update
    */
-  async updateInvoice(id, invoiceData, req) {
+  async updateInvoice(organizationId, id, invoiceData, req) {
     const userId = req.user ? req.user.id : null;
 
     return await db.transaction(async (trx) => {
-      const invoice = await invoiceRepository.findByIdForUpdate(id, trx);
+      const invoice = await invoiceRepository.findByIdForUpdate(organizationId, id, trx);
       if (!invoice) {
-        throw new NotFoundError("Invoice not found");
+        throw new NotFoundError("Invoice not found in your organization");
       }
 
       if (invoice.status === INVOICE_STATUS.PAID || invoice.status === INVOICE_STATUS.CANCELLED) {
@@ -285,7 +290,7 @@ class InvoiceService {
         updateFields.balance_amount = calculation.total_amount - Number(invoice.paid_amount || 0);
       }
 
-      await invoiceRepository.update(id, updateFields, trx);
+      await invoiceRepository.update(organizationId, id, updateFields, trx);
 
       await auditService.logAction(
         req,
@@ -299,22 +304,22 @@ class InvoiceService {
         trx
       );
 
-      const updated = await invoiceRepository.findById(id, trx);
+      const updated = await invoiceRepository.findById(organizationId, id, trx);
       const items = await invoiceRepository.getInvoiceItems(id, trx);
       return { ...updated, items };
     });
   }
 
   /**
-   * Invoice Status Workflow
+   * Tenant-Scoped Status Workflow
    */
-  async updateInvoiceStatus(id, newStatus, reason, req) {
+  async updateInvoiceStatus(organizationId, id, newStatus, reason, req) {
     const userId = req.user ? req.user.id : null;
 
     return await db.transaction(async (trx) => {
-      const invoice = await invoiceRepository.findByIdForUpdate(id, trx);
+      const invoice = await invoiceRepository.findByIdForUpdate(organizationId, id, trx);
       if (!invoice) {
-        throw new NotFoundError("Invoice not found");
+        throw new NotFoundError("Invoice not found in your organization");
       }
 
       const currentStatus = invoice.status;
@@ -322,7 +327,6 @@ class InvoiceService {
         return invoice;
       }
 
-      // State machine validation
       const validTransitions = {
         [INVOICE_STATUS.DRAFT]: [INVOICE_STATUS.SENT, INVOICE_STATUS.CANCELLED],
         [INVOICE_STATUS.SENT]: [INVOICE_STATUS.PARTIAL, INVOICE_STATUS.PAID, INVOICE_STATUS.OVERDUE, INVOICE_STATUS.CANCELLED],
@@ -339,7 +343,6 @@ class InvoiceService {
         );
       }
 
-      // If cancelling, restore inventory
       if (newStatus === INVOICE_STATUS.CANCELLED) {
         const items = await invoiceRepository.getInvoiceItems(id, trx);
         for (const item of items) {
@@ -349,9 +352,8 @@ class InvoiceService {
         }
       }
 
-      await invoiceRepository.update(id, { status: newStatus }, trx);
+      await invoiceRepository.update(organizationId, id, { status: newStatus }, trx);
 
-      // Record status change in history
       await invoiceRepository.createStatusHistory(
         {
           invoiceId: id,
@@ -375,15 +377,12 @@ class InvoiceService {
         trx
       );
 
-      return invoiceRepository.findById(id, trx);
+      return invoiceRepository.findById(organizationId, id, trx);
     });
   }
 
-  /**
-   * Duplicate Invoice as New Draft
-   */
-  async duplicateInvoice(id, req) {
-    const original = await this.getInvoiceById(id);
+  async duplicateInvoice(organizationId, id, req) {
+    const original = await this.getInvoiceById(organizationId, id);
     const invoiceData = {
       client_id: original.client_id,
       issue_date: new Date().toISOString().slice(0, 10),
@@ -401,23 +400,20 @@ class InvoiceService {
       })),
     };
 
-    return this.createInvoice(invoiceData, req);
+    return this.createInvoice(organizationId, invoiceData, req);
   }
 
-  /**
-   * Delete Invoice (Safe Soft/Status Handling)
-   */
-  async deleteInvoice(id, req) {
-    const invoice = await invoiceRepository.findById(id);
+  async deleteInvoice(organizationId, id, req) {
+    const invoice = await invoiceRepository.findById(organizationId, id);
     if (!invoice) {
-      throw new NotFoundError("Invoice not found");
+      throw new NotFoundError("Invoice not found in your organization");
     }
 
     if (invoice.paid_amount > 0) {
       throw new BadRequestError("Cannot delete invoice that has recorded payments. Cancel it instead.");
     }
 
-    return this.updateInvoiceStatus(id, INVOICE_STATUS.CANCELLED, "Cancelled by user", req);
+    return this.updateInvoiceStatus(organizationId, id, INVOICE_STATUS.CANCELLED, "Cancelled by user", req);
   }
 }
 

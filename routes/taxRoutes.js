@@ -3,6 +3,7 @@ const router = express.Router();
 const { taxController } = require("../controllers/taxDiscountController");
 const validate = require("../middlewares/validateMiddleware");
 const authenticateJWT = require("../middlewares/authMiddleware");
+const tenantMiddleware = require("../middlewares/tenantMiddleware");
 const { requirePermission } = require("../middlewares/rbacMiddleware");
 const { PERMISSIONS } = require("../constants/roles");
 const {
@@ -12,6 +13,7 @@ const {
 } = require("../validators/taxDiscountValidator");
 
 router.use(authenticateJWT);
+router.use(tenantMiddleware);
 
 router.get("/", taxController.listTaxes);
 router.get("/:id", taxController.getTaxById);

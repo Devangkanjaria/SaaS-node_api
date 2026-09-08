@@ -3,6 +3,7 @@ const router = express.Router();
 const clientController = require("../controllers/clientController");
 const validate = require("../middlewares/validateMiddleware");
 const authenticateJWT = require("../middlewares/authMiddleware");
+const tenantMiddleware = require("../middlewares/tenantMiddleware");
 const { requirePermission } = require("../middlewares/rbacMiddleware");
 const { PERMISSIONS } = require("../constants/roles");
 const {
@@ -16,6 +17,7 @@ const {
 } = require("../validators/clientValidator");
 
 router.use(authenticateJWT);
+router.use(tenantMiddleware);
 
 // Client CRUD
 router.get("/", requirePermission(PERMISSIONS.CLIENT_VIEW), clientController.listClients);

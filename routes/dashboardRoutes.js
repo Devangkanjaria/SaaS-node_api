@@ -2,10 +2,12 @@ const express = require("express");
 const router = express.Router();
 const dashboardController = require("../controllers/dashboardController");
 const authenticateJWT = require("../middlewares/authMiddleware");
+const tenantMiddleware = require("../middlewares/tenantMiddleware");
 const { requirePermission } = require("../middlewares/rbacMiddleware");
 const { PERMISSIONS } = require("../constants/roles");
 
 router.use(authenticateJWT);
+router.use(tenantMiddleware);
 
 // Dashboard Summary KPI
 router.get("/summary", requirePermission(PERMISSIONS.DASHBOARD_VIEW), dashboardController.getSummary);

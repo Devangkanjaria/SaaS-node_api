@@ -1,20 +1,21 @@
 const db = require("../config/db");
 
 class TaxRepository {
-  async listTaxes() {
-    return db("taxes").select("*").orderBy("rate", "asc");
+  async listTaxes(organizationId) {
+    return db("taxes").where({ organization_id: organizationId }).orderBy("rate", "asc");
   }
 
-  async findById(id) {
-    return db("taxes").where({ id }).first();
+  async findById(organizationId, id) {
+    return db("taxes").where({ id, organization_id: organizationId }).first();
   }
 
-  async findByCode(code) {
-    return db("taxes").where({ code }).first();
+  async findByCode(organizationId, code) {
+    return db("taxes").where({ code, organization_id: organizationId }).first();
   }
 
   async create(taxData) {
     const [id] = await db("taxes").insert({
+      organization_id: taxData.organization_id,
       name: taxData.name,
       code: taxData.code.toUpperCase(),
       rate: taxData.rate,
@@ -23,30 +24,31 @@ class TaxRepository {
       created_at: new Date(),
       updated_at: new Date(),
     });
-    return this.findById(id);
+    return this.findById(taxData.organization_id, id);
   }
 
-  async update(id, updateData) {
-    await db("taxes").where({ id }).update({
+  async update(organizationId, id, updateData) {
+    await db("taxes").where({ id, organization_id: organizationId }).update({
       ...updateData,
       ...(updateData.code && { code: updateData.code.toUpperCase() }),
       updated_at: new Date(),
     });
-    return this.findById(id);
+    return this.findById(organizationId, id);
   }
 }
 
 class DiscountRepository {
-  async listDiscounts() {
-    return db("discounts").select("*").orderBy("id", "asc");
+  async listDiscounts(organizationId) {
+    return db("discounts").where({ organization_id: organizationId }).orderBy("id", "asc");
   }
 
-  async findById(id) {
-    return db("discounts").where({ id }).first();
+  async findById(organizationId, id) {
+    return db("discounts").where({ id, organization_id: organizationId }).first();
   }
 
   async create(discountData) {
     const [id] = await db("discounts").insert({
+      organization_id: discountData.organization_id,
       name: discountData.name,
       type: discountData.type,
       value: discountData.value,
@@ -54,15 +56,15 @@ class DiscountRepository {
       created_at: new Date(),
       updated_at: new Date(),
     });
-    return this.findById(id);
+    return this.findById(discountData.organization_id, id);
   }
 
-  async update(id, updateData) {
-    await db("discounts").where({ id }).update({
+  async update(organizationId, id, updateData) {
+    await db("discounts").where({ id, organization_id: organizationId }).update({
       ...updateData,
       updated_at: new Date(),
     });
-    return this.findById(id);
+    return this.findById(organizationId, id);
   }
 }
 

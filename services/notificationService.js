@@ -1,10 +1,11 @@
 const notificationRepository = require("../repositories/notificationRepository");
 
 class NotificationService {
-  async notify({ userId, type, title, message, entityType, entityId, channel = "in_app" }, trx = null) {
+  async notify({ organizationId, userId, type, title, message, entityType, entityId, channel = "in_app" }, trx = null) {
     try {
       return await notificationRepository.createNotification(
         {
+          organization_id: organizationId,
           user_id: userId,
           type,
           title,
@@ -21,10 +22,10 @@ class NotificationService {
     }
   }
 
-  async listUserNotifications(userId, query) {
+  async listUserNotifications(organizationId, userId, query) {
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 20));
-    return notificationRepository.listUserNotifications(userId, { page, limit, status: query.status });
+    return notificationRepository.listUserNotifications(organizationId, userId, { page, limit, status: query.status });
   }
 
   async markAsRead(id, userId) {
@@ -32,8 +33,8 @@ class NotificationService {
     return { message: "Notification marked as read" };
   }
 
-  async markAllAsRead(userId) {
-    await notificationRepository.markAllAsRead(userId);
+  async markAllAsRead(organizationId, userId) {
+    await notificationRepository.markAllAsRead(organizationId, userId);
     return { message: "All notifications marked as read" };
   }
 }

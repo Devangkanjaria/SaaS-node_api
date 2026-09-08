@@ -2,74 +2,80 @@ const { taxRepository, discountRepository } = require("../repositories/taxDiscou
 const { NotFoundError, ConflictError } = require("../errors/errorTypes");
 
 class TaxService {
-  async listTaxes() {
-    return taxRepository.listTaxes();
+  async listTaxes(organizationId) {
+    return taxRepository.listTaxes(organizationId);
   }
 
-  async getTaxById(id) {
-    const tax = await taxRepository.findById(id);
+  async getTaxById(organizationId, id) {
+    const tax = await taxRepository.findById(organizationId, id);
     if (!tax) {
-      throw new NotFoundError("Tax rate not found");
+      throw new NotFoundError("Tax rate not found in your organization");
     }
     return tax;
   }
 
-  async createTax(taxData) {
-    const existing = await taxRepository.findByCode(taxData.code);
+  async createTax(organizationId, taxData) {
+    const existing = await taxRepository.findByCode(organizationId, taxData.code);
     if (existing) {
-      throw new ConflictError("A tax rate with this code already exists");
+      throw new ConflictError("A tax rate with this code already exists in your organization");
     }
-    return taxRepository.create(taxData);
+    return taxRepository.create({
+      ...taxData,
+      organization_id: organizationId,
+    });
   }
 
-  async updateTax(id, updateData) {
-    const tax = await taxRepository.findById(id);
+  async updateTax(organizationId, id, updateData) {
+    const tax = await taxRepository.findById(organizationId, id);
     if (!tax) {
-      throw new NotFoundError("Tax rate not found");
+      throw new NotFoundError("Tax rate not found in your organization");
     }
-    return taxRepository.update(id, updateData);
+    return taxRepository.update(organizationId, id, updateData);
   }
 
-  async updateTaxStatus(id, status) {
-    const tax = await taxRepository.findById(id);
+  async updateTaxStatus(organizationId, id, status) {
+    const tax = await taxRepository.findById(organizationId, id);
     if (!tax) {
-      throw new NotFoundError("Tax rate not found");
+      throw new NotFoundError("Tax rate not found in your organization");
     }
-    return taxRepository.update(id, { status });
+    return taxRepository.update(organizationId, id, { status });
   }
 }
 
 class DiscountService {
-  async listDiscounts() {
-    return discountRepository.listDiscounts();
+  async listDiscounts(organizationId) {
+    return discountRepository.listDiscounts(organizationId);
   }
 
-  async getDiscountById(id) {
-    const discount = await discountRepository.findById(id);
+  async getDiscountById(organizationId, id) {
+    const discount = await discountRepository.findById(organizationId, id);
     if (!discount) {
-      throw new NotFoundError("Discount not found");
+      throw new NotFoundError("Discount not found in your organization");
     }
     return discount;
   }
 
-  async createDiscount(discountData) {
-    return discountRepository.create(discountData);
+  async createDiscount(organizationId, discountData) {
+    return discountRepository.create({
+      ...discountData,
+      organization_id: organizationId,
+    });
   }
 
-  async updateDiscount(id, updateData) {
-    const discount = await discountRepository.findById(id);
+  async updateDiscount(organizationId, id, updateData) {
+    const discount = await discountRepository.findById(organizationId, id);
     if (!discount) {
-      throw new NotFoundError("Discount not found");
+      throw new NotFoundError("Discount not found in your organization");
     }
-    return discountRepository.update(id, updateData);
+    return discountRepository.update(organizationId, id, updateData);
   }
 
-  async updateDiscountStatus(id, status) {
-    const discount = await discountRepository.findById(id);
+  async updateDiscountStatus(organizationId, id, status) {
+    const discount = await discountRepository.findById(organizationId, id);
     if (!discount) {
-      throw new NotFoundError("Discount not found");
+      throw new NotFoundError("Discount not found in your organization");
     }
-    return discountRepository.update(id, { status });
+    return discountRepository.update(organizationId, id, { status });
   }
 }
 

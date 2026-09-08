@@ -1,9 +1,10 @@
 const db = require("../config/db");
 
 class ReportService {
-  async getDashboardSummary() {
-    // 1. Invoices stats aggregation
+  async getDashboardSummary(organizationId) {
+    // 1. Invoices stats aggregation for tenant
     const invoiceStats = await db("invoices")
+      .where("organization_id", organizationId)
       .select(
         db.raw("COUNT(id) as totalInvoices"),
         db.raw("COALESCE(SUM(total_amount), 0) as totalRevenue"),
@@ -17,17 +18,24 @@ class ReportService {
       )
       .first();
 
-    // 2. Count clients
-    const clientCountResult = await db("clients").where({ status: "active" }).count({ total: "id" }).first();
+    // 2. Count clients in tenant
+    const clientCountResult = await db("clients")
+      .where({ organization_id: organizationId, status: "active" })
+      .count({ total: "id" })
+      .first();
     const totalClients = clientCountResult ? parseInt(clientCountResult.total, 10) : 0;
 
-    // 3. Count products
-    const productCountResult = await db("products").where({ status: "active" }).count({ total: "id" }).first();
+    // 3. Count products in tenant
+    const productCountResult = await db("products")
+      .where({ organization_id: organizationId, status: "active" })
+      .count({ total: "id" })
+      .first();
     const totalProducts = productCountResult ? parseInt(productCountResult.total, 10) : 0;
 
-    // 4. Recent Invoices
+    // 4. Recent Invoices in tenant
     const recentInvoices = await db("invoices")
       .join("clients", "invoices.client_id", "clients.id")
+      .where("invoices.organization_id", organizationId)
       .select("invoices.id", "invoices.invoice_number", "invoices.status", "invoices.total_amount", "invoices.paid_amount", "invoices.issue_date", "clients.name as client_name")
       .orderBy("invoices.created_at", "desc")
       .limit(5);
@@ -50,8 +58,9 @@ class ReportService {
     };
   }
 
-  async getRevenueReport({ fromDate, toDate, groupBy = "month" }) {
+  async getRevenueReport(organizationId, { fromDate, toDate, groupBy = "month" }) {
     let query = db("payments")
+      .where("payments.organization_id", organizationId)
       .where("status", "completed");
 
     if (fromDate) query = query.where("paid_at", ">=", fromDate);
@@ -80,8 +89,8 @@ class ReportService {
     }));
   }
 
-  async getInvoiceReport({ fromDate, toDate }) {
-    let query = db("invoices");
+  async getInvoiceReport(organizationId, { fromDate, toDate }) {
+    let query = db("invoices").where("organization_id", organizationId);
 
     if (fromDate) query = query.where("issue_date", ">=", fromDate);
     if (toDate) query = query.where("issue_date", "<=", toDate);

@@ -1,12 +1,13 @@
 const db = require("../config/db");
 
 class ProductRepository {
-  async listProducts({ page = 1, limit = 10, search, categoryId, status }) {
+  async listProducts(organizationId, { page = 1, limit = 10, search, categoryId, status }) {
     const offset = (page - 1) * limit;
 
     let baseQuery = db("products")
       .leftJoin("product_categories", "products.category_id", "product_categories.id")
-      .leftJoin("product_inventory", "products.id", "product_inventory.product_id");
+      .leftJoin("product_inventory", "products.id", "product_inventory.product_id")
+      .where("products.organization_id", organizationId);
 
     if (search) {
       baseQuery = baseQuery.where(function () {
@@ -43,11 +44,11 @@ class ProductRepository {
     return { products, total };
   }
 
-  async findById(id) {
+  async findById(organizationId, id) {
     return db("products")
       .leftJoin("product_categories", "products.category_id", "product_categories.id")
       .leftJoin("product_inventory", "products.id", "product_inventory.product_id")
-      .where("products.id", id)
+      .where({ "products.id": id, "products.organization_id": organizationId })
       .select(
         "products.*",
         "product_categories.name as category_name",
@@ -58,13 +59,14 @@ class ProductRepository {
       .first();
   }
 
-  async findBySku(sku) {
-    return db("products").where({ sku }).first();
+  async findBySku(organizationId, sku) {
+    return db("products").where({ sku, organization_id: organizationId }).first();
   }
 
   async create(productData, trx = null) {
     const query = (trx || db)("products");
     const [id] = await query.insert({
+      organization_id: productData.organization_id,
       category_id: productData.category_id || null,
       name: productData.name,
       sku: productData.sku || null,
@@ -77,53 +79,54 @@ class ProductRepository {
       created_at: new Date(),
       updated_at: new Date(),
     });
-    return this.findById(id);
+    return this.findById(productData.organization_id, id);
   }
 
-  async update(id, updateData, trx = null) {
+  async update(organizationId, id, updateData, trx = null) {
     const query = (trx || db)("products");
-    await query.where({ id }).update({
+    await query.where({ id, organization_id: organizationId }).update({
       ...updateData,
       updated_at: new Date(),
     });
-    return this.findById(id);
+    return this.findById(organizationId, id);
   }
 
-  async delete(id, trx = null) {
+  async delete(organizationId, id, trx = null) {
     const query = (trx || db)("products");
-    return query.where({ id }).del();
+    return query.where({ id, organization_id: organizationId }).del();
   }
 
   // Categories
-  async listCategories() {
-    return db("product_categories").select("*").orderBy("name", "asc");
+  async listCategories(organizationId) {
+    return db("product_categories").where({ organization_id: organizationId }).orderBy("name", "asc");
   }
 
-  async findCategoryById(id) {
-    return db("product_categories").where({ id }).first();
+  async findCategoryById(organizationId, id) {
+    return db("product_categories").where({ id, organization_id: organizationId }).first();
   }
 
-  async findCategoryByName(name) {
-    return db("product_categories").where({ name }).first();
+  async findCategoryByName(organizationId, name) {
+    return db("product_categories").where({ name, organization_id: organizationId }).first();
   }
 
   async createCategory(categoryData) {
     const [id] = await db("product_categories").insert({
+      organization_id: categoryData.organization_id,
       name: categoryData.name,
       description: categoryData.description || null,
       status: categoryData.status || "active",
       created_at: new Date(),
       updated_at: new Date(),
     });
-    return this.findCategoryById(id);
+    return this.findCategoryById(categoryData.organization_id, id);
   }
 
-  async updateCategory(id, updateData) {
-    await db("product_categories").where({ id }).update({
+  async updateCategory(organizationId, id, updateData) {
+    await db("product_categories").where({ id, organization_id: organizationId }).update({
       ...updateData,
       updated_at: new Date(),
     });
-    return this.findCategoryById(id);
+    return this.findCategoryById(organizationId, id);
   }
 
   // Inventory

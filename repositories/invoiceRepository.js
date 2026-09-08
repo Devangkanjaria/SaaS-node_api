@@ -1,11 +1,12 @@
 const db = require("../config/db");
 
 class InvoiceRepository {
-  async listInvoices({ page = 1, limit = 10, search, status, clientId, dateFrom, dateTo, minAmount, maxAmount, sortBy = "created_at", sortOrder = "desc" }) {
+  async listInvoices(organizationId, { page = 1, limit = 10, search, status, clientId, dateFrom, dateTo, minAmount, maxAmount, sortBy = "created_at", sortOrder = "desc" }) {
     const offset = (page - 1) * limit;
 
     let baseQuery = db("invoices")
       .join("clients", "invoices.client_id", "clients.id")
+      .where("invoices.organization_id", organizationId)
       .select("invoices.*", "clients.name as client_name", "clients.email as client_email", "clients.company_name as client_company");
 
     if (search) {
@@ -52,11 +53,11 @@ class InvoiceRepository {
     return { invoices, total };
   }
 
-  async findById(id, trx = null) {
+  async findById(organizationId, id, trx = null) {
     const query = (trx || db)("invoices");
     return query
       .join("clients", "invoices.client_id", "clients.id")
-      .where("invoices.id", id)
+      .where({ "invoices.id": id, "invoices.organization_id": organizationId })
       .select(
         "invoices.*",
         "clients.name as client_name",
@@ -68,18 +69,19 @@ class InvoiceRepository {
       .first();
   }
 
-  async findByIdForUpdate(id, trx) {
-    return trx("invoices").where({ id }).forUpdate().first();
+  async findByIdForUpdate(organizationId, id, trx) {
+    return trx("invoices").where({ id, organization_id: organizationId }).forUpdate().first();
   }
 
-  async findByInvoiceNumber(invoiceNumber, trx = null) {
+  async findByInvoiceNumber(organizationId, invoiceNumber, trx = null) {
     const query = (trx || db)("invoices");
-    return query.where({ invoice_number: invoiceNumber }).first();
+    return query.where({ invoice_number: invoiceNumber, organization_id: organizationId }).first();
   }
 
   async create(invoiceData, trx = null) {
     const query = (trx || db)("invoices");
     const [id] = await query.insert({
+      organization_id: invoiceData.organization_id,
       invoice_number: invoiceData.invoice_number,
       client_id: invoiceData.client_id,
       status: invoiceData.status || "draft",
@@ -101,18 +103,18 @@ class InvoiceRepository {
     return id;
   }
 
-  async update(id, updateData, trx = null) {
+  async update(organizationId, id, updateData, trx = null) {
     const query = (trx || db)("invoices");
-    await query.where({ id }).update({
+    await query.where({ id, organization_id: organizationId }).update({
       ...updateData,
       updated_at: new Date(),
     });
-    return this.findById(id, trx);
+    return this.findById(organizationId, id, trx);
   }
 
-  async delete(id, trx = null) {
+  async delete(organizationId, id, trx = null) {
     const query = (trx || db)("invoices");
-    return query.where({ id }).del();
+    return query.where({ id, organization_id: organizationId }).del();
   }
 
   // Invoice Items
@@ -160,10 +162,11 @@ class InvoiceRepository {
     return db("payments").where({ invoice_id: invoiceId }).orderBy("paid_at", "desc");
   }
 
-  // Helper to generate unique sequential invoice number
-  async generateNextInvoiceNumber(trx = null) {
+  // Helper to generate unique sequential invoice number scoped per organization
+  async generateNextInvoiceNumber(organizationId, trx = null) {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const latest = await (trx || db)("invoices")
+      .where("organization_id", organizationId)
       .where("invoice_number", "like", `INV-${dateStr}-%`)
       .orderBy("id", "desc")
       .first();

@@ -4,7 +4,7 @@ const { sendSuccess, sendCreated, sendPaginated } = require("../utils/responseHa
 class PaymentController {
   async listPayments(req, res, next) {
     try {
-      const { payments, pagination } = await paymentService.listPayments(req.query);
+      const { payments, pagination } = await paymentService.listPayments(req.organizationId, req.query);
       return sendPaginated(res, "Payments fetched successfully", payments, pagination);
     } catch (err) {
       next(err);
@@ -13,7 +13,7 @@ class PaymentController {
 
   async getPaymentById(req, res, next) {
     try {
-      const payment = await paymentService.getPaymentById(req.params.id);
+      const payment = await paymentService.getPaymentById(req.organizationId, req.params.id);
       return sendSuccess(res, "Payment fetched successfully", payment);
     } catch (err) {
       next(err);
@@ -22,7 +22,7 @@ class PaymentController {
 
   async createPayment(req, res, next) {
     try {
-      const payment = await paymentService.createPayment(req.params.invoiceId, req.body, req);
+      const payment = await paymentService.createPayment(req.organizationId, req.params.invoiceId, req.body, req);
       return sendCreated(res, "Payment recorded successfully", payment);
     } catch (err) {
       next(err);
@@ -31,7 +31,7 @@ class PaymentController {
 
   async refundPayment(req, res, next) {
     try {
-      const payment = await paymentService.refundPayment(req.params.id, req.body, req);
+      const payment = await paymentService.refundPayment(req.organizationId, req.params.id, req.body, req);
       return sendSuccess(res, "Payment refunded successfully", payment);
     } catch (err) {
       next(err);

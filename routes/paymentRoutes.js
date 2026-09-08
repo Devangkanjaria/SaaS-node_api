@@ -3,6 +3,7 @@ const router = express.Router();
 const paymentController = require("../controllers/paymentController");
 const validate = require("../middlewares/validateMiddleware");
 const authenticateJWT = require("../middlewares/authMiddleware");
+const tenantMiddleware = require("../middlewares/tenantMiddleware");
 const { requirePermission } = require("../middlewares/rbacMiddleware");
 const { PERMISSIONS } = require("../constants/roles");
 const {
@@ -12,6 +13,7 @@ const {
 } = require("../validators/paymentValidator");
 
 router.use(authenticateJWT);
+router.use(tenantMiddleware);
 
 router.get("/", requirePermission(PERMISSIONS.PAYMENT_VIEW), paymentController.listPayments);
 router.get("/:id", requirePermission(PERMISSIONS.PAYMENT_VIEW), validate(getPaymentByIdSchema), paymentController.getPaymentById);

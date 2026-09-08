@@ -3,11 +3,11 @@ const auditLogRepository = require("../repositories/auditLogRepository");
 class AuditService {
   async logAction(req, { action, entityType, entityId, oldValues = null, newValues = null }, trx = null) {
     try {
+      const organizationId = req ? req.organizationId : null;
       const userId = req && req.user ? req.user.id : null;
       const ipAddress = req ? req.ip || req.headers["x-forwarded-for"] || req.socket.remoteAddress : null;
       const userAgent = req ? req.headers["user-agent"] : null;
 
-      // Sanitize any sensitive keys if present in values
       const sanitize = (obj) => {
         if (!obj || typeof obj !== "object") return obj;
         const cloned = { ...obj };
@@ -20,6 +20,7 @@ class AuditService {
 
       await auditLogRepository.createLog(
         {
+          organizationId,
           userId,
           action,
           entityType,
@@ -36,10 +37,10 @@ class AuditService {
     }
   }
 
-  async listLogs(query) {
+  async listLogs(organizationId, query) {
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 20));
-    return auditLogRepository.listLogs({
+    return auditLogRepository.listLogs(organizationId, {
       page,
       limit,
       entityType: query.entityType,

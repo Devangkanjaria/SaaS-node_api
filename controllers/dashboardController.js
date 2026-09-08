@@ -6,7 +6,7 @@ const { sendSuccess, sendPaginated } = require("../utils/responseHandler");
 class DashboardController {
   async getSummary(req, res, next) {
     try {
-      const summary = await reportService.getDashboardSummary();
+      const summary = await reportService.getDashboardSummary(req.organizationId);
       return sendSuccess(res, "Dashboard summary fetched successfully", summary);
     } catch (err) {
       next(err);
@@ -16,7 +16,7 @@ class DashboardController {
   async getRevenueReport(req, res, next) {
     try {
       const { from_date, to_date, group_by } = req.query;
-      const report = await reportService.getRevenueReport({
+      const report = await reportService.getRevenueReport(req.organizationId, {
         fromDate: from_date,
         toDate: to_date,
         groupBy: group_by,
@@ -30,7 +30,7 @@ class DashboardController {
   async getInvoiceReport(req, res, next) {
     try {
       const { from_date, to_date } = req.query;
-      const report = await reportService.getInvoiceReport({
+      const report = await reportService.getInvoiceReport(req.organizationId, {
         fromDate: from_date,
         toDate: to_date,
       });
@@ -42,7 +42,7 @@ class DashboardController {
 
   async getAuditLogs(req, res, next) {
     try {
-      const { logs, total } = await auditService.listLogs(req.query);
+      const { logs, total } = await auditService.listLogs(req.organizationId, req.query);
       return sendPaginated(res, "Audit logs fetched successfully", logs, {
         page: req.query.page,
         limit: req.query.limit,
@@ -55,7 +55,7 @@ class DashboardController {
 
   async getNotifications(req, res, next) {
     try {
-      const { notifications, total } = await notificationService.listUserNotifications(req.user.id, req.query);
+      const { notifications, total } = await notificationService.listUserNotifications(req.organizationId, req.user.id, req.query);
       return sendPaginated(res, "Notifications fetched successfully", notifications, {
         page: req.query.page,
         limit: req.query.limit,
@@ -77,7 +77,7 @@ class DashboardController {
 
   async markAllNotificationsRead(req, res, next) {
     try {
-      const result = await notificationService.markAllAsRead(req.user.id);
+      const result = await notificationService.markAllAsRead(req.organizationId, req.user.id);
       return sendSuccess(res, result.message);
     } catch (err) {
       next(err);

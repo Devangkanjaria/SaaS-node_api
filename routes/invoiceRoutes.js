@@ -3,6 +3,7 @@ const router = express.Router();
 const invoiceController = require("../controllers/invoiceController");
 const validate = require("../middlewares/validateMiddleware");
 const authenticateJWT = require("../middlewares/authMiddleware");
+const tenantMiddleware = require("../middlewares/tenantMiddleware");
 const { requirePermission } = require("../middlewares/rbacMiddleware");
 const { PERMISSIONS } = require("../constants/roles");
 const {
@@ -13,6 +14,7 @@ const {
 } = require("../validators/invoiceValidator");
 
 router.use(authenticateJWT);
+router.use(tenantMiddleware);
 
 router.get("/", requirePermission(PERMISSIONS.INVOICE_VIEW), invoiceController.listInvoices);
 router.get("/:id", requirePermission(PERMISSIONS.INVOICE_VIEW), validate(getInvoiceByIdSchema), invoiceController.getInvoiceById);

@@ -4,7 +4,7 @@ const { sendSuccess, sendCreated } = require("../utils/responseHandler");
 class TaxController {
   async listTaxes(req, res, next) {
     try {
-      const taxes = await taxService.listTaxes();
+      const taxes = await taxService.listTaxes(req.organizationId);
       return sendSuccess(res, "Taxes fetched successfully", taxes);
     } catch (err) {
       next(err);
@@ -13,7 +13,7 @@ class TaxController {
 
   async getTaxById(req, res, next) {
     try {
-      const tax = await taxService.getTaxById(req.params.id);
+      const tax = await taxService.getTaxById(req.organizationId, req.params.id);
       return sendSuccess(res, "Tax fetched successfully", tax);
     } catch (err) {
       next(err);
@@ -22,7 +22,7 @@ class TaxController {
 
   async createTax(req, res, next) {
     try {
-      const tax = await taxService.createTax(req.body);
+      const tax = await taxService.createTax(req.organizationId, req.body);
       return sendCreated(res, "Tax created successfully", tax);
     } catch (err) {
       next(err);
@@ -31,7 +31,7 @@ class TaxController {
 
   async updateTax(req, res, next) {
     try {
-      const tax = await taxService.updateTax(req.params.id, req.body);
+      const tax = await taxService.updateTax(req.organizationId, req.params.id, req.body);
       return sendSuccess(res, "Tax updated successfully", tax);
     } catch (err) {
       next(err);
@@ -40,7 +40,7 @@ class TaxController {
 
   async updateTaxStatus(req, res, next) {
     try {
-      const tax = await taxService.updateTaxStatus(req.params.id, req.body.status);
+      const tax = await taxService.updateTaxStatus(req.organizationId, req.params.id, req.body.status);
       return sendSuccess(res, "Tax status updated successfully", tax);
     } catch (err) {
       next(err);
@@ -51,7 +51,7 @@ class TaxController {
 class DiscountController {
   async listDiscounts(req, res, next) {
     try {
-      const discounts = await discountService.listDiscounts();
+      const discounts = await discountService.listDiscounts(req.organizationId);
       return sendSuccess(res, "Discounts fetched successfully", discounts);
     } catch (err) {
       next(err);
@@ -60,7 +60,7 @@ class DiscountController {
 
   async getDiscountById(req, res, next) {
     try {
-      const discount = await discountService.getDiscountById(req.params.id);
+      const discount = await discountService.getDiscountById(req.organizationId, req.params.id);
       return sendSuccess(res, "Discount fetched successfully", discount);
     } catch (err) {
       next(err);
@@ -69,7 +69,7 @@ class DiscountController {
 
   async createDiscount(req, res, next) {
     try {
-      const discount = await discountService.createDiscount(req.body);
+      const discount = await discountService.createDiscount(req.organizationId, req.body);
       return sendCreated(res, "Discount created successfully", discount);
     } catch (err) {
       next(err);
@@ -78,7 +78,7 @@ class DiscountController {
 
   async updateDiscount(req, res, next) {
     try {
-      const discount = await discountService.updateDiscount(req.params.id, req.body);
+      const discount = await discountService.updateDiscount(req.organizationId, req.params.id, req.body);
       return sendSuccess(res, "Discount updated successfully", discount);
     } catch (err) {
       next(err);
@@ -87,7 +87,7 @@ class DiscountController {
 
   async updateDiscountStatus(req, res, next) {
     try {
-      const discount = await discountService.updateDiscountStatus(req.params.id, req.body.status);
+      const discount = await discountService.updateDiscountStatus(req.organizationId, req.params.id, req.body.status);
       return sendSuccess(res, "Discount status updated successfully", discount);
     } catch (err) {
       next(err);

@@ -1,10 +1,10 @@
 const db = require("../config/db");
 
 class ClientRepository {
-  async listClients({ page = 1, limit = 10, search, status }) {
+  async listClients(organizationId, { page = 1, limit = 10, search, status }) {
     const offset = (page - 1) * limit;
 
-    let baseQuery = db("clients");
+    let baseQuery = db("clients").where("clients.organization_id", organizationId);
 
     if (search) {
       baseQuery = baseQuery.where(function () {
@@ -32,13 +32,14 @@ class ClientRepository {
     return { clients, total };
   }
 
-  async findById(id) {
-    return db("clients").where({ id }).first();
+  async findById(organizationId, id) {
+    return db("clients").where({ id, organization_id: organizationId }).first();
   }
 
   async create(clientData, trx = null) {
     const query = (trx || db)("clients");
     const [id] = await query.insert({
+      organization_id: clientData.organization_id,
       name: clientData.name,
       email: clientData.email || null,
       phone: clientData.phone || null,
@@ -50,21 +51,21 @@ class ClientRepository {
       created_at: new Date(),
       updated_at: new Date(),
     });
-    return this.findById(id);
+    return this.findById(clientData.organization_id, id);
   }
 
-  async update(id, updateData, trx = null) {
+  async update(organizationId, id, updateData, trx = null) {
     const query = (trx || db)("clients");
-    await query.where({ id }).update({
+    await query.where({ id, organization_id: organizationId }).update({
       ...updateData,
       updated_at: new Date(),
     });
-    return this.findById(id);
+    return this.findById(organizationId, id);
   }
 
-  async delete(id, trx = null) {
+  async delete(organizationId, id, trx = null) {
     const query = (trx || db)("clients");
-    return query.where({ id }).del();
+    return query.where({ id, organization_id: organizationId }).del();
   }
 
   // Client Addresses
@@ -113,9 +114,9 @@ class ClientRepository {
     return query.where({ client_id: clientId, address_type: addressType }).update({ is_default: false });
   }
 
-  async getClientInvoices(clientId, { limit = 10 } = {}) {
+  async getClientInvoices(organizationId, clientId, { limit = 10 } = {}) {
     return db("invoices")
-      .where({ client_id: clientId })
+      .where({ client_id: clientId, organization_id: organizationId })
       .select("id", "invoice_number", "status", "issue_date", "due_date", "total_amount", "paid_amount", "balance_amount")
       .orderBy("created_at", "desc")
       .limit(limit);

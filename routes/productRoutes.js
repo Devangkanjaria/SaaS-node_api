@@ -3,6 +3,7 @@ const router = express.Router();
 const productController = require("../controllers/productController");
 const validate = require("../middlewares/validateMiddleware");
 const authenticateJWT = require("../middlewares/authMiddleware");
+const tenantMiddleware = require("../middlewares/tenantMiddleware");
 const { requirePermission } = require("../middlewares/rbacMiddleware");
 const { PERMISSIONS } = require("../constants/roles");
 const {
@@ -16,6 +17,7 @@ const {
 } = require("../validators/productValidator");
 
 router.use(authenticateJWT);
+router.use(tenantMiddleware);
 
 // Categories
 router.get("/categories", requirePermission(PERMISSIONS.PRODUCT_VIEW), productController.listCategories);

@@ -4,6 +4,7 @@ class NotificationRepository {
   async createNotification(data, trx = null) {
     const query = (trx || db)("notifications");
     const [id] = await query.insert({
+      organization_id: data.organization_id || null,
       user_id: data.user_id,
       type: data.type,
       title: data.title,
@@ -21,9 +22,9 @@ class NotificationRepository {
     return db("notifications").where({ id }).first();
   }
 
-  async listUserNotifications(userId, { page = 1, limit = 20, status }) {
+  async listUserNotifications(organizationId, userId, { page = 1, limit = 20, status }) {
     const offset = (page - 1) * limit;
-    let query = db("notifications").where({ user_id: userId });
+    let query = db("notifications").where({ user_id: userId, organization_id: organizationId });
 
     if (status) {
       query = query.where({ status });
@@ -49,8 +50,8 @@ class NotificationRepository {
     });
   }
 
-  async markAllAsRead(userId) {
-    return db("notifications").where({ user_id: userId, status: "pending" }).update({
+  async markAllAsRead(organizationId, userId) {
+    return db("notifications").where({ user_id: userId, organization_id: organizationId, status: "pending" }).update({
       status: "read",
       read_at: new Date(),
     });
