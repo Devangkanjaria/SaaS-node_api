@@ -1,76 +1,70 @@
-const Invoice = require("../models/invoiceModel");
-const db= require("../config/db");
-exports.createInvoice = async (req, res) => {
-  try {
-    const id = await Invoice.create(req.body);
-    res.status(201).json({ id });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+const invoiceService = require("../services/invoiceService");
+const { sendSuccess, sendCreated, sendPaginated } = require("../utils/responseHandler");
 
-exports.getAllInvoices = async (req, res) => {
-  try {
-    const data = await Invoice.getAll();
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-exports.getInvoiceById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // 1. Get the main invoice details
-    const invoice = await db("invoices").where({ id }).first();
-    
-    if (!invoice) {
-      return res.status(404).json({ message: "Invoice not found" });
+class InvoiceController {
+  async listInvoices(req, res, next) {
+    try {
+      const { invoices, pagination } = await invoiceService.listInvoices(req.query);
+      return sendPaginated(res, "Invoices fetched successfully", invoices, pagination);
+    } catch (err) {
+      next(err);
     }
-
-    // 2. Get the items AND the product names using a JOIN
-    const items = await db("invoice_items")
-      .join("products", "invoice_items.productId", "=", "products.id")
-      .select(
-        "invoice_items.*", 
-        "products.name as productName" // This creates the productName field
-      )
-      .where("invoice_items.invoice_id", id);
-
-    // 3. Send back the combined data
-    res.json({ ...invoice, items });
-  } catch (err) {
-    console.error("SQL Error:", err.message);
-    res.status(500).json({ error: "Database lookup failed: " + err.message });
   }
-};
-exports.updateInvoice = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = req.body;
 
-    await Invoice.update(id, updateData);
-
-    res.status(200).json({ message: "Invoice updated successfully" });
-  } catch (err) {
-    console.error("Update Error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-};
-
-exports.deleteInvoice = async (req, res) => {
-  try {
-    const { id } = req.params;
-    // Call the model function to delete from MySQL
-    const result = await Invoice.delete(id);
-
-    if (result === 0) {
-      return res.status(404).json({ error: "Invoice not found in database" });
+  async getInvoiceById(req, res, next) {
+    try {
+      const invoice = await invoiceService.getInvoiceById(req.params.id);
+      return sendSuccess(res, "Invoice fetched successfully", invoice);
+    } catch (err) {
+      next(err);
     }
-
-    res.json({ message: "Invoice deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
-};
+
+  async createInvoice(req, res, next) {
+    try {
+      const invoice = await invoiceService.createInvoice(req.body, req);
+      return sendCreated(res, "Invoice created successfully", invoice);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateInvoice(req, res, next) {
+    try {
+      const invoice = await invoiceService.updateInvoice(req.params.id, req.body, req);
+      return sendSuccess(res, "Invoice updated successfully", invoice);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateInvoiceStatus(req, res, next) {
+    try {
+      const { status, reason } = req.body;
+      const invoice = await invoiceService.updateInvoiceStatus(req.params.id, status, reason, req);
+      return sendSuccess(res, "Invoice status updated successfully", invoice);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async duplicateInvoice(req, res, next) {
+    try {
+      const invoice = await invoiceService.duplicateInvoice(req.params.id, req);
+      return sendCreated(res, "Invoice duplicated successfully", invoice);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async deleteInvoice(req, res, next) {
+    try {
+      const invoice = await invoiceService.deleteInvoice(req.params.id, req);
+      return sendSuccess(res, "Invoice cancelled successfully", invoice);
+    } catch (err) {
+      next(err);
+    }
+  }
+}
+
+module.exports = new InvoiceController();

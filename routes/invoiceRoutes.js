@@ -1,20 +1,25 @@
 const express = require("express");
 const router = express.Router();
 const invoiceController = require("../controllers/invoiceController");
+const validate = require("../middlewares/validateMiddleware");
+const authenticateJWT = require("../middlewares/authMiddleware");
+const { requirePermission } = require("../middlewares/rbacMiddleware");
+const { PERMISSIONS } = require("../constants/roles");
+const {
+  createInvoiceSchema,
+  updateInvoiceSchema,
+  updateInvoiceStatusSchema,
+  getInvoiceByIdSchema,
+} = require("../validators/invoiceValidator");
 
-// Matches API.get("/invoices")
-router.get("/", invoiceController.getAllInvoices); 
+router.use(authenticateJWT);
 
-// Matches API.get("/invoices/:id")
-router.get("/:id", invoiceController.getInvoiceById); 
-
-// Matches API.post("/invoices")
-router.post("/", invoiceController.createInvoice); 
-
-// IMPORTANT: Add this line for the delete functionality
-router.delete("/:id", invoiceController.deleteInvoice);
-
-// backend/routes/invoiceRoutes.js
-router.put("/:id", invoiceController.updateInvoice);
+router.get("/", requirePermission(PERMISSIONS.INVOICE_VIEW), invoiceController.listInvoices);
+router.get("/:id", requirePermission(PERMISSIONS.INVOICE_VIEW), validate(getInvoiceByIdSchema), invoiceController.getInvoiceById);
+router.post("/", requirePermission(PERMISSIONS.INVOICE_CREATE), validate(createInvoiceSchema), invoiceController.createInvoice);
+router.put("/:id", requirePermission(PERMISSIONS.INVOICE_UPDATE), validate(updateInvoiceSchema), invoiceController.updateInvoice);
+router.patch("/:id/status", requirePermission(PERMISSIONS.INVOICE_STATUS_CHANGE), validate(updateInvoiceStatusSchema), invoiceController.updateInvoiceStatus);
+router.post("/:id/duplicate", requirePermission(PERMISSIONS.INVOICE_CREATE), validate(getInvoiceByIdSchema), invoiceController.duplicateInvoice);
+router.delete("/:id", requirePermission(PERMISSIONS.INVOICE_DELETE), validate(getInvoiceByIdSchema), invoiceController.deleteInvoice);
 
 module.exports = router;
